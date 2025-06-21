@@ -2,6 +2,7 @@
 
 namespace Sabre\VObject\Recur;
 
+use DateTimeImmutable;
 use DateTimeInterface;
 use Iterator;
 use Sabre\VObject\DateTimeParser;
@@ -30,7 +31,8 @@ class RDateIterator implements Iterator
     {
         $this->startDate = $start;
         $this->parseRDate($rrule);
-        $this->currentDate = clone $this->startDate;
+        array_unshift($this->dates, DateTimeImmutable::createFromInterface($this->startDate));
+        $this->rewind();
     }
 
     /* Implementation of the Iterator interface {{{ */
@@ -39,10 +41,16 @@ class RDateIterator implements Iterator
     public function current()
     {
         if (!$this->valid()) {
-            return;
+            return null;
         }
-
-        return clone $this->currentDate;
+        if (is_string($this->dates[$this->counter])) {
+            $this->dates[$this->counter] =
+                DateTimeParser::parse(
+                    $this->dates[$this->counter],
+                    $this->startDate->getTimezone()
+                );
+        }
+        return $this->dates[$this->counter];
     }
 
     /**
@@ -65,7 +73,7 @@ class RDateIterator implements Iterator
     #[\ReturnTypeWillChange]
     public function valid()
     {
-        return $this->counter <= count($this->dates);
+        return $this->counter < count($this->dates);
     }
 
     /**
@@ -76,7 +84,6 @@ class RDateIterator implements Iterator
     #[\ReturnTypeWillChange]
     public function rewind()
     {
-        $this->currentDate = clone $this->startDate;
         $this->counter = 0;
     }
 
@@ -92,12 +99,6 @@ class RDateIterator implements Iterator
         if (!$this->valid()) {
             return;
         }
-
-        $this->currentDate =
-            DateTimeParser::parse(
-                $this->dates[$this->counter - 1],
-                $this->startDate->getTimezone()
-            );
     }
 
     /* End of Iterator implementation }}} */
@@ -118,7 +119,7 @@ class RDateIterator implements Iterator
      */
     public function fastForward(DateTimeInterface $dt)
     {
-        while ($this->valid() && $this->currentDate < $dt) {
+        while ($this->valid() && $this->current() < $dt) {
             $this->next();
         }
     }
@@ -131,14 +132,6 @@ class RDateIterator implements Iterator
      * @var DateTimeInterface
      */
     protected $startDate;
-
-    /**
-     * The date of the current iteration. You can get this by calling
-     * ->current().
-     *
-     * @var DateTimeInterface
-     */
-    protected $currentDate;
 
     /**
      * The current item in the list.
